@@ -130,8 +130,13 @@ int main(int argc, char *argv[])
     // DDoS Application Behaviour
     OnOffHelper onoff("ns3::UdpSocketFactory", Address(InetSocketAddress(i12.GetAddress(1), UDP_SINK_PORT)));
     onoff.SetConstantRate(DataRate(DDOS_RATE));
-    onoff.SetAttribute("OnTime", StringValue("ns3::ConstantRandomVariable[Constant=30]"));
-    onoff.SetAttribute("OffTime", StringValue("ns3::ConstantRandomVariable[Constant=0]"));
+    // onoff.SetAttribute("OnTime", StringValue("ns3::ConstantRandomVariable[Constant=30]"));
+    // onoff.SetAttribute("OffTime", StringValue("ns3::ConstantRandomVariable[Constant=0]"));
+      
+    // Set the "on" and "off" times to follow an exponential distribution
+    // double lambda = 2.0; // average rate (packets per second)
+    onoff.SetAttribute("OnTime", StringValue("ns3::ExponentialRandomVariable[Mean=3.14]"));
+    onoff.SetAttribute("OffTime", StringValue("ns3::ExponentialRandomVariable[Mean=3.14]"));
     ApplicationContainer onOffApp[NUMBER_OF_BOTS];
 
     //Install application in all bots
