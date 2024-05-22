@@ -5,14 +5,14 @@
  * 
  * In this we follow the following setup / node placement
  * 
- *    (n1)
+ *    (n1) 10.1.1.0
  *      \
  *       \
- *         -------- (n2) -------- (n3)
+ *         -------- (n2) -------- (n3) 10.1.2.0
  *                 / |  \
  *                /  |   \ 
  *               /   |    \
- *             (B0),(B2)...(Bn) 
+ *             (B0),(B2)...(Bn) 10.0.0.0
  *                 
  *  N0 is legitimate user, communicating with server N2 (data server) via node N1 (maybe website server interface )
  *  B0-Bn are bots DDoS-ing the network.
@@ -141,7 +141,7 @@ int main(int argc, char *argv[])
     // Set the "on" and "off" times to follow an exponential distribution
     // double lambda = 2.0; // average rate (packets per second)
     onoff.SetAttribute("OnTime", StringValue("ns3::ExponentialRandomVariable[Mean=3.14]"));
-    onoff.SetAttribute("OffTime", StringValue("ns3::ExponentialRandomVariable[Mean=3.14]"));
+    onoff.SetAttribute("OffTime", StringValue("ns3::ExponentialRandomVariable[Mean=0.5]"));
     ApplicationContainer onOffApp[number_of_bots];
 
     //Install application in all bots
@@ -209,11 +209,11 @@ int main(int argc, char *argv[])
 
         myfile.open (outputCsv);  
         myfile << "SimulationTime,";
-        for(uint32_t i=0;i<number_of_bots;i++) {
-        myfile << "Bot Flow" << i+1 << ",";
-        }
         for(uint32_t i=0;i<2;i++) {
         myfile << "Client Flow" << i+1 << ",";
+        }
+        for(uint32_t i=0;i<number_of_bots;i++) {
+        myfile << "Bot Flow" << i+1 << ",";
         }
         myfile << "InstantThr,TotalThr" << std::endl;
         Simulator::Schedule(Seconds(warmupTime), &PrintFlowMonitorStats); //Schedule printing stats to file
@@ -302,6 +302,9 @@ void PrintFlowMonitorStats () {
   double flowThr=0;
   double totalThr=0;
   uint32_t rxBytes=0;
+
+  // print XML
+  monitor->SerializeToXmlFile("flowmon-dump.xml", true, true);
 
   // ns3::FlowMonitor::FlowStats::bytesDropped
   std::map<FlowId, FlowMonitor::FlowStats> flowStats = monitor->GetFlowStats ();	  
