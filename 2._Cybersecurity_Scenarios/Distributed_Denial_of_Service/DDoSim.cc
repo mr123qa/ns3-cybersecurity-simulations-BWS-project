@@ -65,6 +65,7 @@ int main(int argc, char *argv[])
     uint32_t max_bulk_bytes = 100000000;
     uint32_t number_of_bots = 3;
     uint32_t max_flows = 100;
+    bool include_bots = false;
     std::string ddosrate = "20480kb/s";
     CommandLine cmd;
     cmd.AddValue ("simulationTime", "Simulation time (seconds)", simulationTime);
@@ -72,6 +73,7 @@ int main(int argc, char *argv[])
     cmd.AddValue ("number_of_bots", "Number of bots for DDos (3)", number_of_bots);
     cmd.AddValue ("max_flows", "Max number of flows (100)", max_flows);
     cmd.AddValue ("ddos_rate", "DDoS rate (20480kb/s)", ddosrate);
+    cmd.AddValue ("include_bots", "Bots included in the statistics", include_bots);
     cmd.Parse(argc, argv);
     std::cout << "Simulation time: " << simulationTime << std::endl;
     std::cout << "Max bulk bytes: " << max_bulk_bytes << std::endl;
@@ -200,7 +202,12 @@ int main(int argc, char *argv[])
     }
 
     //Install FlowMonitor
-    monitor = flowmon.InstallAll ();
+    if (include_bots) {
+      monitor = flowmon.InstallAll ();
+    }
+    else {
+      monitor = flowmon.Install (nodes); 
+    }
 
     // Prepare output CSV file
     if (useCsv) {
@@ -212,9 +219,12 @@ int main(int argc, char *argv[])
         for(uint32_t i=0;i<2;i++) {
         myfile << "Client Flow" << i+1 << ",";
         }
-        for(uint32_t i=0;i<number_of_bots;i++) {
-        myfile << "Bot Flow" << i+1 << ",";
+        if (include_bots) {
+          for(uint32_t i=0;i<number_of_bots;i++) {
+            myfile << "Bot Flow" << i+1 << ",";
+          }
         }
+        
         myfile << "InstantThr,TotalThr" << std::endl;
         Simulator::Schedule(Seconds(warmupTime), &PrintFlowMonitorStats); //Schedule printing stats to file
     }
