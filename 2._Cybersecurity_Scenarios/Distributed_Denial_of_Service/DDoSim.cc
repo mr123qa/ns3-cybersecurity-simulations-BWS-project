@@ -53,6 +53,7 @@ uint32_t rxBytesWarmup[100]={0}; //max_flows = 100
 uint32_t rxBytesPrev=0;
 uint32_t warmupTime = 0;
 uint32_t interval = 1; //Interval for calculating instantaneous throughput [s]
+bool record_thr = true;
 
 int main(int argc, char *argv[])
 {
@@ -66,6 +67,9 @@ int main(int argc, char *argv[])
     uint32_t number_of_bots = 3;
     uint32_t max_flows = 100;
     bool include_bots = false;
+
+    bool record_jitter = false;
+
     std::string ddosrate = "20480kb/s";
     CommandLine cmd;
     cmd.AddValue ("simulationTime", "Simulation time (seconds)", simulationTime);
@@ -74,6 +78,7 @@ int main(int argc, char *argv[])
     cmd.AddValue ("max_flows", "Max number of flows (100)", max_flows);
     cmd.AddValue ("ddos_rate", "DDoS rate (20480kb/s)", ddosrate);
     cmd.AddValue ("include_bots", "Bots included in the statistics", include_bots);
+    cmd.AddValue ("record_jitter", "Record jitterSum instead of throughput", record_jitter);
     cmd.Parse(argc, argv);
     std::cout << "Simulation time: " << simulationTime << std::endl;
     std::cout << "Max bulk bytes: " << max_bulk_bytes << std::endl;
@@ -85,6 +90,9 @@ int main(int argc, char *argv[])
     LogComponentEnable("UdpEchoClientApplication", LOG_LEVEL_INFO);
     LogComponentEnable("UdpEchoServerApplication", LOG_LEVEL_INFO);
 
+    if (record_jitter == true) {
+      record_thr = false;
+    }
 
     //Legitimate connection bots
     NodeContainer nodes;
@@ -308,10 +316,22 @@ bool fileExists(const std::string& filename)
 }
 
 
+// void PrintJitterStats() {
+//   // print XML
+//   monitor->SerializeToXmlFile("flowmon-dump.xml", true, true);
+
+//   // ns3::FlowMonitor::FlowStats::bytesDropped
+//   std::map<FlowId, FlowMonitor::FlowStats> flowStats = monitor->GetFlowStats ();	  
+//   Ptr<Ipv4FlowClassifier> classifier = DynamicCast<Ipv4FlowClassifier> (flowmon.GetClassifier ());
+
+// }
+
 void PrintFlowMonitorStats () {  
   double flowThr=0;
   double totalThr=0;
   uint32_t rxBytes=0;
+  // const ns3::Time jitter;
+  // double jitterInst=0;
 
   // print XML
   monitor->SerializeToXmlFile("flowmon-dump.xml", true, true);
@@ -326,7 +346,9 @@ void PrintFlowMonitorStats () {
       rxBytesPrev += stats->second.rxBytes;
     }
   }
-  else {
+  else if (record_thr){
+
+
     myfile << Simulator::Now().GetSeconds () << ",";
     for (std::map<FlowId, FlowMonitor::FlowStats>::const_iterator stats = flowStats.begin (); stats != flowStats.end (); ++stats)
     {
@@ -339,6 +361,25 @@ void PrintFlowMonitorStats () {
     }
     myfile << ((rxBytes-rxBytesPrev)*8/(interval*1e6)) << "," << totalThr << std::endl;
     rxBytesPrev = rxBytes;
+  }
+  else {
+      // std::cout << "- jitterSum: " << ns3::FlowMonitor::FlowStats::jitterSum << " ns" << std::endl;
+      
+      myfile << Simulator::Now().GetSeconds () << ",";
+      for (std::map<FlowId, FlowMonitor::FlowStats>::const_iterator stats = flowStats.begin (); stats != flowStats.end (); ++stats)
+      {
+
+        // jitter = (stats->second.jitterSum);
+        //std::cout << "- jitterSum: " << stats->second.jitterSum << " ns" << std::endl;
+        myfile<< stats->second.jitterSum.GetMilliSeconds() << ", ";
+        flowThr=(stats->second.rxBytes-rxBytesWarmup[stats->first-1]) * 8.0 / ((Simulator::Now().GetSeconds () - warmupTime) * 1e6);
+        if (stats->second.rxBytes!=0) {
+          rxBytes += stats->second.rxBytes;
+          totalThr += flowThr;
+        }
+      }
+      myfile << ((rxBytes-rxBytesPrev)*8/(interval*1e6)) << "," << totalThr << std::endl;
+      rxBytesPrev = rxBytes;
   }
 
   Simulator::Schedule(Seconds(interval), &PrintFlowMonitorStats); //Schedule next stats printout
