@@ -58,6 +58,8 @@ double delaySum = 0;
 double delayDiff=0;
 double packetsTot=0;
 double packetsDiff=0;
+double delaySum_warmup=0;
+double packetsTot_warmup=0;
 
 
 int main(int argc, char *argv[])
@@ -98,6 +100,8 @@ int main(int argc, char *argv[])
     if (record_delay == true) {
       record_thr = false;
     }
+
+    simulationTime += (double) warmupTime;
 
     //Legitimate connection bots
     NodeContainer nodes;
@@ -172,7 +176,7 @@ int main(int argc, char *argv[])
     bulkSend.SetAttribute("MaxBytes", UintegerValue(max_bulk_bytes));
     ApplicationContainer bulkSendApp = bulkSend.Install(nodes.Get(0));
     bulkSendApp.Start(Seconds(0.0));
-    bulkSendApp.Stop(Seconds(simulationTime - 10));
+    bulkSendApp.Stop(Seconds(0.0)); // było simulationTime-10
 
     // UDPSink on receiver side
     PacketSinkHelper UDPsink("ns3::UdpSocketFactory",
@@ -266,7 +270,10 @@ int main(int argc, char *argv[])
     std::chrono::duration<double> elapsed = finish - start;
     std::cout << "Elapsed time: " << elapsed.count() << " s\n\n";
 
-    myfile<< "Mean: ," << (delaySum/ 1e6) /  packetsTot << std::endl;
+    std::cout << "delay warmup: " << delaySum_warmup<< "\n";
+    std::cout << "packets warmup: " << packetsTot_warmup<< "\n";
+
+    myfile<< "Mean: ," << ((delaySum - delaySum_warmup)/ 1e6) /  (packetsTot - packetsTot_warmup) << std::endl;
     if (useCsv) myfile.close();
 
     ////////////////////////// TCP Sink ///////////////////////////////
@@ -350,6 +357,11 @@ void PrintFlowMonitorStats () {
     for (std::map<FlowId, FlowMonitor::FlowStats>::const_iterator stats = flowStats.begin (); stats != flowStats.end (); ++stats) {
       rxBytesWarmup[stats->first-1] = stats->second.rxBytes;
       rxBytesPrev += stats->second.rxBytes;
+      
+      if (stats->first == 1) {
+        delaySum_warmup = stats->second.delaySum.GetDouble();
+        packetsTot_warmup = stats->second.rxPackets;
+      } 
     }
   }
   else if (record_thr){
@@ -386,10 +398,10 @@ void PrintFlowMonitorStats () {
           packetsDiff = packetsTot - packetsDiff;
 
           myfile<< (delayDiff / 1e6) /  packetsDiff << ", ";
-          // std::cout << "- delaySum: " << delaySum << std::endl;
-          // std::cout << "- delayDiff: " << delayDiff << std::endl;
-          // std::cout << "- packetsTot: " << packetsTot << std::endl;
-          // std::cout << "- packetsDiff: " << packetsDiff << std::endl;
+          std::cout << "- delaySum: " << delaySum << std::endl;
+          std::cout << "- delayDiff: " << delayDiff << std::endl;
+          std::cout << "- packetsTot: " << packetsTot << std::endl;
+          std::cout << "- packetsDiff: " << packetsDiff << std::endl;
 
           delayDiff = delaySum;
           packetsDiff = packetsTot;
