@@ -51,9 +51,14 @@ Ptr<FlowMonitor> monitor;
 std::ofstream myfile;
 uint32_t rxBytesWarmup[100]={0}; //max_flows = 100
 uint32_t rxBytesPrev=0;
-uint32_t warmupTime = 0;
+uint32_t warmupTime = 2;
 uint32_t interval = 1; //Interval for calculating instantaneous throughput [s]
 bool record_thr = true;
+double delaySum = 0;
+double delayDiff=0;
+double packetsTot=0;
+double packetsDiff=0;
+
 
 int main(int argc, char *argv[])
 {
@@ -63,12 +68,12 @@ int main(int argc, char *argv[])
     bool useCsv = true; 						// Flag for saving output to CSV file
     bool useTcp = false;
     double simulationTime = 10;
-    uint32_t max_bulk_bytes = 100000000;
+    uint32_t max_bulk_bytes = 100000000;    // default = 100 000 000  ---> 100 Mb
     uint32_t number_of_bots = 3;
     uint32_t max_flows = 100;
     bool include_bots = false;
 
-    bool record_jitter = false;
+    bool record_delay = false;
 
     std::string ddosrate = "20480kb/s";
     CommandLine cmd;
@@ -78,7 +83,7 @@ int main(int argc, char *argv[])
     cmd.AddValue ("max_flows", "Max number of flows (100)", max_flows);
     cmd.AddValue ("ddos_rate", "DDoS rate (20480kb/s)", ddosrate);
     cmd.AddValue ("include_bots", "Bots included in the statistics", include_bots);
-    cmd.AddValue ("record_jitter", "Record jitterSum instead of throughput", record_jitter);
+    cmd.AddValue ("record_delay", "Record jitterSum instead of throughput", record_delay);
     cmd.Parse(argc, argv);
     std::cout << "Simulation time: " << simulationTime << std::endl;
     std::cout << "Max bulk bytes: " << max_bulk_bytes << std::endl;
@@ -90,7 +95,7 @@ int main(int argc, char *argv[])
     LogComponentEnable("UdpEchoClientApplication", LOG_LEVEL_INFO);
     LogComponentEnable("UdpEchoServerApplication", LOG_LEVEL_INFO);
 
-    if (record_jitter == true) {
+    if (record_delay == true) {
       record_thr = false;
     }
 
@@ -104,7 +109,7 @@ int main(int argc, char *argv[])
 
     // Define the Point-To-Point Links and their Paramters
     PointToPointHelper pp1, pp2;
-    pp1.SetDeviceAttribute("DataRate", StringValue("10Mbps"));
+    pp1.SetDeviceAttribute("DataRate", StringValue("20Mbps"));
     pp1.SetChannelAttribute("Delay", StringValue("1ms"));
 
     pp2.SetDeviceAttribute("DataRate", StringValue("100Mbps"));
@@ -261,6 +266,7 @@ int main(int argc, char *argv[])
     std::chrono::duration<double> elapsed = finish - start;
     std::cout << "Elapsed time: " << elapsed.count() << " s\n\n";
 
+    myfile<< "Mean: ," << (delaySum/ 1e6) /  packetsTot << std::endl;
     if (useCsv) myfile.close();
 
     ////////////////////////// TCP Sink ///////////////////////////////
@@ -305,6 +311,7 @@ int main(int argc, char *argv[])
 
     //Clean-up
     Simulator::Destroy();
+
     return 0;
 }
 
@@ -330,8 +337,7 @@ void PrintFlowMonitorStats () {
   double flowThr=0;
   double totalThr=0;
   uint32_t rxBytes=0;
-  // const ns3::Time jitter;
-  // double jitterInst=0;
+
 
   // print XML
   monitor->SerializeToXmlFile("flowmon-dump.xml", true, true);
@@ -363,15 +369,35 @@ void PrintFlowMonitorStats () {
     rxBytesPrev = rxBytes;
   }
   else {
-      // std::cout << "- jitterSum: " << ns3::FlowMonitor::FlowStats::jitterSum << " ns" << std::endl;
-      
       myfile << Simulator::Now().GetSeconds () << ",";
       for (std::map<FlowId, FlowMonitor::FlowStats>::const_iterator stats = flowStats.begin (); stats != flowStats.end (); ++stats)
       {
 
         // jitter = (stats->second.jitterSum);
-        //std::cout << "- jitterSum: " << stats->second.jitterSum << " ns" << std::endl;
-        myfile<< stats->second.jitterSum.GetMilliSeconds() << ", ";
+        // std::cout << "- jitterSum: " << stats->second.delaySum.GetDouble() << " ns" << std::endl;
+
+        // WARNING the instant delay is calculated only for the first flow! 
+
+        if (stats->first == 1) {
+          delaySum = stats->second.delaySum.GetDouble();
+          packetsTot = stats->second.rxPackets;
+
+          delayDiff = delaySum - delayDiff;
+          packetsDiff = packetsTot - packetsDiff;
+
+          myfile<< (delayDiff / 1e6) /  packetsDiff << ", ";
+          // std::cout << "- delaySum: " << delaySum << std::endl;
+          // std::cout << "- delayDiff: " << delayDiff << std::endl;
+          // std::cout << "- packetsTot: " << packetsTot << std::endl;
+          // std::cout << "- packetsDiff: " << packetsDiff << std::endl;
+
+          delayDiff = delaySum;
+          packetsDiff = packetsTot;
+        }
+        else {
+          myfile<< (stats->second.delaySum.GetDouble()/ 1e6) /  stats->second.rxPackets << ", ";
+        }
+
         flowThr=(stats->second.rxBytes-rxBytesWarmup[stats->first-1]) * 8.0 / ((Simulator::Now().GetSeconds () - warmupTime) * 1e6);
         if (stats->second.rxBytes!=0) {
           rxBytes += stats->second.rxBytes;
@@ -380,7 +406,8 @@ void PrintFlowMonitorStats () {
       }
       myfile << ((rxBytes-rxBytesPrev)*8/(interval*1e6)) << "," << totalThr << std::endl;
       rxBytesPrev = rxBytes;
-  }
+
+  } 
 
   Simulator::Schedule(Seconds(interval), &PrintFlowMonitorStats); //Schedule next stats printout
 }
